@@ -1,7 +1,5 @@
-import dotenv from "dotenv";
-import axios from "axios";
-
-dotenv.config();
+import 'dotenv/config'; // isso carrega automaticamente o .env
+import axios from 'axios';
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
@@ -20,3 +18,4 @@ async function setWebhook() {
 }
 
 setWebhook();
+
