@@ -1,5 +1,5 @@
-import axios from "axios";
 import dotenv from "dotenv";
+import axios from "axios";
 
 dotenv.config();
 
