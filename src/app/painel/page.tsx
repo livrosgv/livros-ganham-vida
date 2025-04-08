@@ -2,6 +2,21 @@
 
 import { useState } from "react"
 
+// Função utilitária para converter links do Telegram em links diretos
+async function gerarLinkDiretoTelegram(link: string): Promise<string> {
+  try {
+    const resposta = await fetch("/api/telegram/transformar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ link }),
+    })
+    const json = await resposta.json()
+    return json?.url || link
+  } catch {
+    return link // 🔥 não precisa do (e), pois ele não era usado
+  }
+}
+
 export default function Painel() {
   const [titulo, setTitulo] = useState("")
   const [descricao, setDescricao] = useState("")
@@ -19,15 +34,21 @@ export default function Painel() {
 
   const categoriasExistentes = ["Fantasia", "Romance", "Ação", "Suspense", "Terror"]
 
-  const handleChangeEpisodio = (
+  const handleChangeEpisodio = async (
     temporadaIndex: number,
     episodioIndex: number,
     field: string,
     value: string
   ) => {
     const novasTemporadas = [...temporadas]
+
+    let novoValor = value
+    if (value.startsWith("https://t.me/")) {
+      novoValor = await gerarLinkDiretoTelegram(value)
+    }
+
     // @ts-expect-error – acesso dinâmico ao campo
-novasTemporadas[temporadaIndex].episodios[episodioIndex][field] = value
+    novasTemporadas[temporadaIndex].episodios[episodioIndex][field] = novoValor
     setTemporadas(novasTemporadas)
   }
 
@@ -101,7 +122,6 @@ novasTemporadas[temporadaIndex].episodios[episodioIndex][field] = value
                     </div>
                   )}
 
-                  {/* ✅ NOVO: Link da capa + prévia automática */}
                   <input type="text" placeholder="Link da capa do episódio (Telegram)" className="w-full p-2 rounded bg-[#0f0f2f] text-white" value={ep.capa} onChange={(e) => handleChangeEpisodio(temporadaIndex, index, "capa", e.target.value)} />
                   {ep.capa && (
                     <div>
