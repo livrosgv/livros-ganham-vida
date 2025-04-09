@@ -1,20 +1,32 @@
 "use client"
 
 import { useState } from "react"
+import PreviewMidia from "@/components/PreviewMidia"
+import { doc, getDoc } from "firebase/firestore"
+import { db } from "@/firebase"
 
-// Função utilitária para converter links do Telegram em links diretos
-async function gerarLinkDiretoTelegram(link: string): Promise<string> {
+async function buscarLinkTransformado(linkOriginal: string): Promise<string> {
   try {
-    const resposta = await fetch("/api/telegram/transformar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ link }),
-    })
-    const json = await resposta.json()
-    return json?.url || link
-  } catch {
-    return link // 🔥 não precisa do (e), pois ele não era usado
+    const docRef = doc(db, "linksTransformados", linkOriginal)
+    const snap = await getDoc(docRef)
+    if (snap.exists()) {
+      return snap.data().linkTransformado
+    }
+  } catch (err) {
+    console.error("Erro ao buscar no Firestore:", err)
   }
+  return linkOriginal
+}
+
+type Episodio = {
+  titulo: string
+  duracao: string
+  video: string
+  capa: string
+}
+
+type Temporada = {
+  episodios: Episodio[]
 }
 
 export default function Painel() {
@@ -26,10 +38,8 @@ export default function Painel() {
   const [classificacao, setClassificacao] = useState("")
   const [dataUltimoEpisodio, setDataUltimoEpisodio] = useState("")
 
-  const [temporadas, setTemporadas] = useState([
-    {
-      episodios: [{ titulo: "", duracao: "", video: "", capa: "" }],
-    },
+  const [temporadas, setTemporadas] = useState<Temporada[]>([
+    { episodios: [{ titulo: "", duracao: "", video: "", capa: "" }] },
   ])
 
   const categoriasExistentes = ["Fantasia", "Romance", "Ação", "Suspense", "Terror"]
@@ -37,19 +47,28 @@ export default function Painel() {
   const handleChangeEpisodio = async (
     temporadaIndex: number,
     episodioIndex: number,
-    field: string,
+    field: keyof Episodio,
     value: string
   ) => {
     const novasTemporadas = [...temporadas]
 
-    let novoValor = value
     if (value.startsWith("https://t.me/")) {
-      novoValor = await gerarLinkDiretoTelegram(value)
+      const transformado = await buscarLinkTransformado(value)
+      novasTemporadas[temporadaIndex].episodios[episodioIndex][field] = transformado
+    } else {
+      novasTemporadas[temporadaIndex].episodios[episodioIndex][field] = value
     }
 
-    // @ts-expect-error – acesso dinâmico ao campo
-    novasTemporadas[temporadaIndex].episodios[episodioIndex][field] = novoValor
     setTemporadas(novasTemporadas)
+  }
+
+  const handleChangeCapa = async (link: string) => {
+    if (link.startsWith("https://t.me/")) {
+      const transformado = await buscarLinkTransformado(link)
+      setCapa(transformado)
+    } else {
+      setCapa(link)
+    }
   }
 
   const adicionarEpisodio = (temporadaIndex: number) => {
@@ -77,13 +96,11 @@ export default function Painel() {
               <button
                 key={cat}
                 className={`px-3 py-1 rounded-full border ${selecionada ? "bg-green-500 text-black" : "bg-[#221c48]"}`}
-                onClick={() => {
-                  if (selecionada) {
-                    setCategoriasSelecionadas(categoriasSelecionadas.filter(c => c !== cat))
-                  } else {
-                    setCategoriasSelecionadas([...categoriasSelecionadas, cat])
-                  }
-                }}
+                onClick={() =>
+                  selecionada
+                    ? setCategoriasSelecionadas(categoriasSelecionadas.filter((c) => c !== cat))
+                    : setCategoriasSelecionadas([...categoriasSelecionadas, cat])
+                }
               >
                 {cat}
               </button>
@@ -93,15 +110,10 @@ export default function Painel() {
 
         <input type="text" placeholder="Nova categoria (opcional)" className="w-full p-3 rounded bg-[#221c48] text-white" value={novaCategoria} onChange={(e) => setNovaCategoria(e.target.value)} />
         <input type="text" placeholder="Classificação indicativa (ex: Livre, 12 anos...)" className="w-full p-3 rounded bg-[#221c48] text-white" value={classificacao} onChange={(e) => setClassificacao(e.target.value)} />
-        <input type="text" placeholder="Link da imagem de capa (Telegram)" className="w-full p-3 rounded bg-[#221c48] text-white" value={capa} onChange={(e) => setCapa(e.target.value)} />
-        <input type="text" placeholder="Data do último episódio adicionado" className="w-full p-3 rounded bg-[#221c48] text-white mb-4" value={dataUltimoEpisodio} onChange={(e) => setDataUltimoEpisodio(e.target.value)} />
+        <input type="text" placeholder="Link da imagem de capa (Telegram)" className="w-full p-3 rounded bg-[#221c48] text-white" value={capa} onChange={(e) => handleChangeCapa(e.target.value)} />
+        <PreviewMidia url={capa} />
 
-        {capa && (
-          <div>
-            <p className="text-sm mb-2">Prévia da capa:</p>
-            <img src={capa} alt="Prévia da capa" className="rounded-xl border border-white max-w-xs" />
-          </div>
-        )}
+        <input type="text" placeholder="Data do último episódio adicionado" className="w-full p-3 rounded bg-[#221c48] text-white mb-4" value={dataUltimoEpisodio} onChange={(e) => setDataUltimoEpisodio(e.target.value)} />
 
         {temporadas.map((temporada, temporadaIndex) => (
           <details key={temporadaIndex} className="bg-[#221c48] rounded p-3">
@@ -114,21 +126,9 @@ export default function Painel() {
                   <input type="text" placeholder="Título do episódio" className="w-full p-2 rounded bg-[#0f0f2f] text-white" value={ep.titulo} onChange={(e) => handleChangeEpisodio(temporadaIndex, index, "titulo", e.target.value)} />
                   <input type="text" placeholder="Duração (ex: 10min)" className="w-full p-2 rounded bg-[#0f0f2f] text-white" value={ep.duracao} onChange={(e) => handleChangeEpisodio(temporadaIndex, index, "duracao", e.target.value)} />
                   <input type="text" placeholder="Link do vídeo (Telegram)" className="w-full p-2 rounded bg-[#0f0f2f] text-white" value={ep.video} onChange={(e) => handleChangeEpisodio(temporadaIndex, index, "video", e.target.value)} />
-
-                  {ep.video && (
-                    <div>
-                      <p className="text-sm">Prévia do vídeo:</p>
-                      <video src={ep.video} controls className="rounded-lg border border-white max-w-md" />
-                    </div>
-                  )}
-
+                  <PreviewMidia url={ep.video} />
                   <input type="text" placeholder="Link da capa do episódio (Telegram)" className="w-full p-2 rounded bg-[#0f0f2f] text-white" value={ep.capa} onChange={(e) => handleChangeEpisodio(temporadaIndex, index, "capa", e.target.value)} />
-                  {ep.capa && (
-                    <div>
-                      <p className="text-sm">Prévia da capa:</p>
-                      <img src={ep.capa} alt="Capa do episódio" className="rounded-lg border border-white max-w-xs" />
-                    </div>
-                  )}
+                  <PreviewMidia url={ep.capa} />
                 </div>
               </details>
             ))}

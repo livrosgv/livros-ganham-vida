@@ -1,21 +1,23 @@
-import 'dotenv/config'; // isso carrega automaticamente o .env
-import axios from 'axios';
+import fetch from 'node-fetch';
 
-const token = process.env.TELEGRAM_BOT_TOKEN;
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-
-const webhookUrl = `${siteUrl}/api/telegram/webhook`;
+const BOT_TOKEN = '7339241221:AAFqqK-5eLpi-L_pXeJ9PASUef-NhA6bsnU';
+const WEBHOOK_URL = 'https://livros-ganham-vida.vercel.app/api/telegram/webhook';
 
 async function setWebhook() {
   try {
-    const res = await axios.get(
-      `https://api.telegram.org/bot${token}/setWebhook?url=${webhookUrl}`
+    const res = await fetch(
+      `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${WEBHOOK_URL}`
     );
-    console.log("✅ Webhook ativado:", res.data);
-  } catch (err) {
-    console.error("❌ Erro ao ativar webhook:", err);
+
+    const data = await res.json();
+    console.log('📡 Resultado:', data);
+  } catch (error) {
+    console.error('❌ Erro ao configurar o webhook:', error);
   }
 }
 
 setWebhook();
+
+
+
 
