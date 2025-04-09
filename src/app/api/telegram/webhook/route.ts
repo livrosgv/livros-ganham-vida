@@ -1,59 +1,57 @@
-import { NextRequest, NextResponse } from "next/server";
-import { initializeApp, getApps } from "firebase/app";
-import { getFirestore, doc, setDoc } from "firebase/firestore";
-import { gerarLinkDiretoTelegram, linkParaId } from "@/utils/telegram";
-import { salvarLinkConvertido } from "@/utils/salvarLinkConvertido";
+import { NextResponse } from "next/server";
+import { db } from '@/lib/firebase';
+import { collection, addDoc } from "firebase/firestore";
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
-};
-
-if (!getApps().length) {
-  initializeApp(firebaseConfig);
-}
-
-const db = getFirestore();
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const msg = body.message || body.channel_post;
 
-    if (!msg) return NextResponse.json({ status: "ignorado" });
+    const mensagem = body.message || body.edited_message;
+    if (!mensagem || !mensagem.chat || !mensagem.chat.id || !mensagem.message_id) {
+      return NextResponse.json({ error: "Mensagem inválida" }, { status: 400 });
+    }
 
-    const tipo = msg.photo ? "photo"
-      : msg.video ? "video"
-      : msg.audio ? "audio"
-      : msg.document ? "document"
-      : null;
+    const tipo = mensagem.photo ? "photo" :
+                 mensagem.video ? "video" :
+                 mensagem.document ? "document" : "desconhecido";
 
-    if (!tipo) return NextResponse.json({ status: "ignorado" });
+    const fileId =
+      mensagem?.photo?.[mensagem.photo.length - 1]?.file_id ||
+      mensagem?.video?.file_id ||
+      mensagem?.document?.file_id;
 
-    const arquivo = msg.photo?.at(-1) || msg[tipo];
-    const file_id = arquivo.file_id;
+    const linkOriginal = `https://t.me/arquivosgv/${mensagem.message_id}`;
 
-    const linkDireto = await gerarLinkDiretoTelegram(file_id);
-    const username = msg.chat?.username || msg.sender_chat?.username || "arquivosgv";
-    const linkOriginal = `https://t.me/${username}/${msg.message_id}`;
-    const docId = linkParaId(linkOriginal);
+    if (!fileId) {
+      return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 400 });
+    }
 
-    await setDoc(doc(db, "links", docId), {
-      link_original: linkOriginal,
-      link_direto: linkDireto,
+    // Buscar o file_path pela API do Telegram
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const resposta = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`);
+    const json = await resposta.json();
+
+    if (!json.ok) {
+      throw new Error("Erro ao buscar file_path: " + JSON.stringify(json));
+    }
+
+    const filePath = json.result.file_path;
+    const linkDireto = `https://api.telegram.org/file/bot${token}/${filePath}`;
+
+    // Salvar no Firestore
+    await addDoc(collection(db, "links"), {
       tipo,
-      criadoEm: new Date().toISOString(),
+      fileId,
+      linkOriginal,
+      linkDireto,
+      criadoEm: new Date(),
     });
 
-    await salvarLinkConvertido(linkOriginal, linkDireto);
+    console.log(`✅ Link salvo no sistema: ${linkOriginal} → ${linkDireto}`);
 
-    return NextResponse.json({ status: "ok", linkDireto });
-  } catch (error) {
-    console.error("Erro no webhook:", error);
-    return NextResponse.json({ status: "erro", error: String(error) });
+    return NextResponse.json({ ok: true });
+  } catch (erro) {
+    console.error("Erro no webhook:", erro);
+    return NextResponse.json({ error: "Erro interno no servidor" }, { status: 500 });
   }
 }
