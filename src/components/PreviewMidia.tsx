@@ -1,65 +1,54 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { getDoc, doc } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
-import { linkParaId } from '@/utils/telegram'
+import React from 'react'
 
-type Props = {
-  url: string
+interface Props {
+  link_original: string
+  tipo: 'photo' | 'video' | 'audio' | 'document'
 }
 
-export default function PreviewMidia({ url }: Props) {
-  const [linkFinal, setLinkFinal] = useState<string | null>(null)
+export default function PreviewMidia({ link_original, tipo }: Props) {
+  return (
+    <div className="bg-gray-100 p-4 rounded-lg shadow-md text-sm text-black">
+      <p className="mb-2">Tipo: <strong>{tipo}</strong></p>
 
-  useEffect(() => {
-    if (!url || typeof url !== 'string') return
+      {tipo === 'photo' && (
+        <img src={link_original} alt="imagem" className="rounded w-full h-auto mb-2" />
+      )}
 
-    const buscarLinkConvertido = async () => {
-      try {
-        const id = linkParaId(url)
-        const ref = doc(db, 'midias', id)
-        const snap = await getDoc(ref)
+      {tipo === 'video' && (
+        <video controls className="rounded w-full h-auto mb-2">
+          <source src={link_original} type="video/mp4" />
+          Seu navegador não suporta vídeos.
+        </video>
+      )}
 
-        if (snap.exists()) {
-          const data = snap.data()
-          setLinkFinal(data.convertido || url)
-        } else {
-          setLinkFinal(url)
-        }
-      } catch (error) {
-        console.error('Erro ao buscar link no Firestore:', error)
-        setLinkFinal(url)
-      }
-    }
+      {tipo === 'audio' && (
+        <audio controls className="w-full mb-2">
+          <source src={link_original} type="audio/mpeg" />
+          Seu navegador não suporta áudio.
+        </audio>
+      )}
 
-    buscarLinkConvertido()
-  }, [url])
+      {tipo === 'document' && (
+        <a
+          href={link_original}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline"
+        >
+          Ver documento no Telegram
+        </a>
+      )}
 
-  if (!linkFinal) return null
-
-  if (linkFinal.endsWith('.mp4') || linkFinal.includes('/video/')) {
-    return (
-      <video
-        src={linkFinal}
-        controls
-        className="w-full max-w-lg rounded my-2"
-      />
-    )
-  }
-
-  if (
-    linkFinal.match(/\.(jpeg|jpg|gif|png)$/i) ||
-    linkFinal.includes('/photos/')
-  ) {
-    return (
-      <img
-        src={linkFinal}
-        alt="Prévia da imagem"
-        className="w-full max-w-xs rounded my-2"
-      />
-    )
-  }
-
-  return null
+      <a
+        href={link_original}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 underline text-xs"
+      >
+        Ver no Telegram
+      </a>
+    </div>
+  )
 }
