@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
     if (!tipo) return NextResponse.json({ status: "ignorado" });
 
-    const arquivo = msg[tipo] || (msg.photo && msg.photo.at(-1));
+    const arquivo = msg.photo?.at(-1) || msg[tipo];
     const file_id = arquivo.file_id;
 
     const linkDireto = await gerarLinkDiretoTelegram(file_id);
