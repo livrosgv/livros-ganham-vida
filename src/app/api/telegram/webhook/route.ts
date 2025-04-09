@@ -5,6 +5,7 @@ import { collection, addDoc } from "firebase/firestore";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    console.log("📦 Corpo recebido:", JSON.stringify(body));
 
     const mensagem = body.message || body.edited_message;
     if (!mensagem || !mensagem.chat || !mensagem.chat.id || !mensagem.message_id) {
@@ -21,6 +22,10 @@ export async function POST(req: Request) {
       mensagem?.document?.file_id;
 
     const linkOriginal = `https://t.me/arquivosgv/${mensagem.message_id}`;
+
+    // ✅ Agora os logs estão na ordem certa
+    console.log("📎 FileId extraído:", fileId);
+    console.log("📍 Link original:", linkOriginal);
 
     if (!fileId) {
       return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 400 });
@@ -51,7 +56,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (erro) {
-    console.error("Erro no webhook:", erro);
+    console.error("❌ Erro no webhook:", erro);
     return NextResponse.json({ error: "Erro interno no servidor" }, { status: 500 });
   }
 }
