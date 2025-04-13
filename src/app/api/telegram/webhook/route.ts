@@ -1,58 +1,65 @@
-import { NextResponse } from "next/server";
-import { db } from '@/lib/firebase';
-import { collection, addDoc } from "firebase/firestore";
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/firebase'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
+export async function POST(req: NextRequest) {
+  const body = await req.json()
+  console.log('📥 Webhook recebido:', JSON.stringify(body, null, 2))
 
-    console.log("📦 Corpo recebido:", JSON.stringify(body));
-
-    const mensagem = body.message || body.edited_message || body.channel_post;
-
-    if (!mensagem || !mensagem.chat || !mensagem.message_id) {
-      return NextResponse.json({ error: "Mensagem inválida" }, { status: 400 });
-    }
-
-    const tipo = mensagem.photo ? "photo" :
-                 mensagem.video ? "video" :
-                 mensagem.document ? "document" : "desconhecido";
-
-    const fileId =
-      mensagem?.photo?.[mensagem.photo.length - 1]?.file_id ||
-      mensagem?.video?.file_id ||
-      mensagem?.document?.file_id;
-
-    const linkOriginal = `https://t.me/arquivosgv/${mensagem.message_id}`;
-
-    if (!fileId) {
-      return NextResponse.json({ error: "Arquivo não encontrado" }, { status: 400 });
-    }
-
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    const resposta = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`);
-    const json = await resposta.json();
-
-    if (!json.ok) {
-      throw new Error("Erro ao buscar file_path: " + JSON.stringify(json));
-    }
-
-    const filePath = json.result.file_path;
-    const linkDireto = `https://api.telegram.org/file/bot${token}/${filePath}`;
-
-    await addDoc(collection(db, "links"), {
-      tipo,
-      fileId,
-      linkOriginal,
-      linkDireto,
-      criadoEm: new Date(),
-    });
-
-    console.log(`✅ Link salvo no sistema: ${linkOriginal} → ${linkDireto}`);
-
-    return NextResponse.json({ ok: true });
-  } catch (erro) {
-    console.error("❌ Erro no webhook:", erro);
-    return NextResponse.json({ error: "Erro interno no servidor" }, { status: 500 });
+  const mensagem = body?.message || body?.channel_post
+  if (!mensagem) {
+    console.log('❌ Nenhuma mensagem encontrada.')
+    return NextResponse.json({ ok: false, message: 'Nenhuma mensagem encontrada.' })
   }
+
+  const fileId =
+    mensagem?.photo?.[mensagem.photo.length - 1]?.file_id ||
+    mensagem?.video?.file_id ||
+    mensagem?.document?.file_id ||
+    mensagem?.audio?.file_id
+
+  if (!fileId) {
+    console.log('❌ Nenhum file_id detectado.')
+    return NextResponse.json({ ok: true, message: 'Sem mídia detectada.' })
+  }
+
+  let filePath = ''
+  try {
+    const res = await fetch(
+      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`
+    )
+    const data = await res.json()
+    filePath = data?.result?.file_path
+  } catch (e) {
+    console.log('❌ Erro ao tentar obter o caminho do arquivo:', e)
+  }
+
+  let tipo: 'photo' | 'video' | 'audio' | 'document' | 'desconhecido' = 'desconhecido'
+  if (mensagem.photo) tipo = 'photo'
+  else if (mensagem.video) tipo = 'video'
+  else if (mensagem.audio) tipo = 'audio'
+  else if (mensagem.document) tipo = 'document'
+
+  const chatId = mensagem.chat.id.toString().replace('-100', '')
+  const messageId = mensagem.message_id
+  const linkOriginal = `https://t.me/c/${chatId}/${messageId}`
+
+  const docData = {
+    linkOriginal,
+    tipo,
+    criadoEm: serverTimestamp(),
+  }
+
+  if (filePath) {
+    const linkDireto = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${filePath}`
+    Object.assign(docData, { linkDireto, status: 'ok' })
+    console.log('✅ Salvando no Firestore com linkDireto:', linkDireto)
+  } else {
+    Object.assign(docData, { fileId, status: 'pendente' })
+    console.log('⚠️ Arquivo ainda em processamento. Salvando como pendente.')
+  }
+
+  await addDoc(collection(db, 'links'), docData)
+
+  return NextResponse.json({ ok: true })
 }

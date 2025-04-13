@@ -1,55 +1,28 @@
-// src/app/api/auth/[...nextauth]/route.ts
-import NextAuth from "next-auth"
-import CredentialsProvider from "next-auth/providers/credentials"
-import { auth } from "@/lib/firebase"
-import { signInWithEmailAndPassword } from "firebase/auth"
+// 📁 src/app/api/auth/[...nextauth]/route.ts
+import NextAuth from 'next-auth'
+import GoogleProvider from 'next-auth/providers/google'
+import { FirestoreAdapter } from '@auth/firebase-adapter'
+import { cert } from 'firebase-admin/app'
 
-const handler = NextAuth({
+export const authOptions = {
   providers: [
-    CredentialsProvider({
-      name: "Login por E-mail",
-      credentials: {
-        email: { label: "E-mail", type: "text" },
-        password: { label: "Senha", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials.password) return null
-
-        try {
-          const userCredential = await signInWithEmailAndPassword(
-            auth,
-            credentials.email,
-            credentials.password
-          )
-          const user = userCredential.user
-          return { id: user.uid, email: user.email }
-        } catch (error) {
-          console.error("Erro no login:", error)
-          return null
-        }
-      },
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
-  session: {
-    strategy: "jwt",
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) token.user = user
-      return token
-    },
-    async session({ session, token }) {
-      session.user = token.user as {
-        id: string
-        email: string
-      }
-      return session
-    },
-  },
+  adapter: FirestoreAdapter({
+    credential: cert({
+      projectId: process.env.FIREBASE_PROJECT_ID!,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL!,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY!.replace(/\\n/g, '\n'),
+    }),
+  }),
+  secret: process.env.NEXTAUTH_SECRET,
   pages: {
-    signIn: "/login", // depois vamos criar essa página 💌
+    signIn: '/login',
   },
-})
+}
 
+const handler = NextAuth(authOptions)
 export { handler as GET, handler as POST }
-
