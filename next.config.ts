@@ -5,13 +5,36 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**.t.me', // libera imagens do Telegram
+        hostname: 'api.telegram.org', // arquivos convertidos do Telegram
       },
       {
         protocol: 'https',
-        hostname: '**.googleusercontent.com', // libera fotos de perfil do Google
+        hostname: 'lh3.googleusercontent.com', // fotos de perfil Google
+      },
+      {
+        protocol: 'https',
+        hostname: 't.me', // links do Telegram (corrigido)
+      },
+      {
+        protocol: 'https',
+        hostname: 'googleusercontent.com', // domínio base do Google (corrigido)
       },
     ],
+  },
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [
+          {
+            type: 'host',
+            value: 'livrosganhamvida.com.br', // sem o www
+          },
+        ],
+        destination: 'https://www.livrosganhamvida.com.br/:path*',
+        permanent: true,
+      },
+    ];
   },
 };
 
